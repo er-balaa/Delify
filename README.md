@@ -91,3 +91,22 @@ delify/
 🟡 Development in Progress
 
 ⭐ Delify – Making food ordering simple and fast!
+
+
+PS C:\Users\erbal\Delify> git fetch origin
+From https://github.com/er-balaa/Delify
+ * [new branch]      dev             -> origin/dev
+ * [new branch]      login-page/bala -> origin/login-page/bala
+PS C:\Users\erbal\Delify> git checkout "login-page/bala"
+branch 'login-page/bala' set up to track 'origin/login-page/bala'.
+Switched to a new branch 'login-page/bala'
+PS C:\Users\erbal\Delify> git pull origin  "login-page/bala"
+From https://github.com/er-balaa/Delify
+ * branch            login-page/bala -> FETCH_HEAD
+Already up to date.
+PS C:\Users\erbal\Delify> git status
+On branch login-page/bala
+Your branch is up to date with 'origin/login-page/bala'.
+
+nothing to commit, working tree clean
+PS C:\Users\erbal\Delify> 
