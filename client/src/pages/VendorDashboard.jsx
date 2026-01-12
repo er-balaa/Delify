@@ -127,7 +127,8 @@ const VendorDashboard = () => {
             fetchVendorData();
         } catch (err) {
             console.error("Update failed", err);
-            alert("Failed to update order");
+            const errMsg = err.response?.data?.msg || err.response?.data?.error || err.message;
+            alert(`Failed to update order: ${errMsg}`);
         }
     };
 
@@ -315,6 +316,7 @@ const VendorDashboard = () => {
                                                 }}
                                             >
                                                 <option value="placed">Placed</option>
+                                                <option value="ordered">Ordered</option>
                                                 <option value="preparing">Preparing</option>
                                                 <option value="out_for_delivery">Out for Delivery</option>
                                                 <option value="delivered">Delivered</option>

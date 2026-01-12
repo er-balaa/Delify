@@ -217,3 +217,42 @@ h3 {
 .animate-float {
   animation: float 4s ease-in-out infinite;
 }
+
+/* Responsive Utilities */
+@media (max-width: 768px) {
+  h1 { font-size: 2.5rem; }
+  h2 { font-size: 2rem; }
+  h3 { font-size: 1.5rem; }
+  
+  .container {
+    padding-left: 1.5rem !important;
+    padding-right: 1.5rem !important;
+  }
+  
+  .container-fluid {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+
+  .grid-cols-2 {
+    grid-template-columns: 1fr !important;
+  }
+
+  .flex-mobile-col {
+    flex-direction: column !important;
+  }
+
+  .w-mobile-100 {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+  
+  .hide-on-mobile {
+    display: none !important;
+  }
+  
+  .p-mobile-sm {
+    padding: 1rem !important;
+  }
+}

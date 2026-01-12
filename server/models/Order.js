@@ -11,6 +11,10 @@ const orderSchema = new mongoose.Schema({
         ref: 'Restaurant',
         required: true,
     },
+    deliveryPerson: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+    },
     items: [
         {
             menuItem: {
@@ -34,7 +38,7 @@ const orderSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['placed', 'preparing', 'out_for_delivery', 'delivered', 'cancelled', 'out_of_stock'],
+        enum: ['placed', 'ordered', 'preparing', 'out_for_delivery', 'delivered', 'cancelled', 'out_of_stock'],
         default: 'placed',
     },
     estimatedDeliveryTime: {
@@ -43,6 +47,14 @@ const orderSchema = new mongoose.Schema({
     deliveryAddress: {
         type: String,
         required: true,
+    },
+    isVisibleToUser: {
+        type: Boolean,
+        default: true
+    },
+    isRated: {
+        type: Boolean,
+        default: false
     },
 }, { timestamps: true });
 

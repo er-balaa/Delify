@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { FiEdit2 } from 'react-icons/fi';
+import { FiEdit2, FiStar } from 'react-icons/fi';
 
 const RestaurantCard = ({ restaurant }) => {
     const { currentUser } = useAuth();
@@ -94,7 +94,7 @@ const RestaurantCard = ({ restaurant }) => {
                             alignItems: 'center',
                             gap: '4px'
                         }}>
-                            <span>⭐</span> {restaurant.rating}
+                            <FiStar size={16} fill="#FFC107" color="#FFC107" /> {restaurant.rating}
                         </div>
                     )}
 

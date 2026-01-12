@@ -3,10 +3,48 @@ import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import { Link } from 'react-router-dom';
 import { io } from 'socket.io-client';
-import { FiTrash2 } from 'react-icons/fi';
+import { FiTrash2, FiPhone, FiTruck, FiStar, FiShoppingBag } from 'react-icons/fi';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 
 const DeliveryInfo = ({ order }) => {
+    const [timeLeft, setTimeLeft] = useState(null);
+
+    useEffect(() => {
+        if (!order.estimatedDeliveryTime) return;
+
+        // Check if input is a pure number (e.g. "60" or "120")
+        const isNumeric = /^\d+$/.test(order.estimatedDeliveryTime);
+
+        if (isNumeric) {
+            const durationInMinutes = parseInt(order.estimatedDeliveryTime, 10);
+            // Calculate target time based on when the order was last updated (which should be when the status/time changed)
+            // or we could assume the timer starts NOW if we don't have a reliable start time relative to the estimate setting.
+            // A better approach for "remaining time" updates is usually server-side, but here we'll approximate:
+            // "Updated At" + Duration.
+            const startTime = new Date(order.updatedAt).getTime();
+            const targetTime = startTime + (durationInMinutes * 60 * 1000);
+
+            const interval = setInterval(() => {
+                const now = new Date().getTime();
+                const difference = targetTime - now;
+
+                if (difference <= 0) {
+                    setTimeLeft("Arriving soon...");
+                    clearInterval(interval);
+                } else {
+                    const hours = Math.floor((difference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                    const minutes = Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60));
+                    const seconds = Math.floor((difference % (1000 * 60)) / 1000);
+
+                    setTimeLeft(`${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`);
+                }
+            }, 1000);
+
+            return () => clearInterval(interval);
+        }
+    }, [order.estimatedDeliveryTime, order.updatedAt]);
+
     if (order.status === 'delivered') {
         return (
             <span style={{ fontFamily: 'monospace', fontSize: '1.2rem', fontWeight: '700', color: '#4CAF50' }}>
@@ -16,9 +54,12 @@ const DeliveryInfo = ({ order }) => {
     }
 
     if (order.estimatedDeliveryTime) {
+        // Check if it's numeric to decide what to show
+        const isNumeric = /^\d+$/.test(order.estimatedDeliveryTime);
+
         return (
             <span style={{ fontFamily: 'monospace', fontSize: '1.2rem', fontWeight: '700', color: 'var(--primary)' }}>
-                Arriving in: {order.estimatedDeliveryTime}
+                Arriving in: {isNumeric ? (timeLeft || "Calculating...") : order.estimatedDeliveryTime}
             </span>
         );
     }
@@ -30,10 +71,59 @@ const DeliveryInfo = ({ order }) => {
     );
 };
 
+const RateModal = ({ order, isOpen, onClose, onSubmit }) => {
+    const [rating, setRating] = useState(5);
+    const [comment, setComment] = useState('');
+
+    if (!isOpen) return null;
+
+    return (
+        <div style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 1000,
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }}>
+            <div style={{
+                background: '#1F1D2B', padding: '2rem', borderRadius: '16px', width: '90%', maxWidth: '400px',
+                border: '1px solid rgba(255,255,255,0.1)'
+            }}>
+                <h3 style={{ marginBottom: '1.5rem', textAlign: 'center' }}>Rate your experience</h3>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
+                    {[1, 2, 3, 4, 5].map((star) => (
+                        <div key={star}
+                            onClick={() => setRating(star)}
+                            style={{ cursor: 'pointer', padding: '0 4px' }}
+                        >
+                            <FiStar
+                                size={32}
+                                fill={star <= rating ? '#FFC107' : 'none'}
+                                color={star <= rating ? '#FFC107' : '#444'}
+                            />
+                        </div>
+                    ))}
+                </div>
+                <textarea
+                    placeholder="Wanna say something? (optional)"
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                    style={{
+                        width: '100%', background: 'rgba(255,255,255,0.05)', border: 'none', color: 'white',
+                        padding: '1rem', borderRadius: '8px', marginBottom: '1.5rem', minHeight: '100px'
+                    }}
+                />
+                <div style={{ display: 'flex', gap: '1rem' }}>
+                    <button onClick={onClose} style={{ flex: 1, padding: '0.8rem', borderRadius: '8px', border: 'none', background: 'rgba(255,255,255,0.1)', color: 'white', cursor: 'pointer' }}>Cancel</button>
+                    <button onClick={() => onSubmit(rating, comment)} style={{ flex: 1, padding: '0.8rem', borderRadius: '8px', border: 'none', background: 'var(--primary)', color: 'white', cursor: 'pointer' }}>Submit</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const Orders = () => {
     const { currentUser } = useAuth();
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [ratingOrder, setRatingOrder] = useState(null); // Track which order is being rated
 
     useEffect(() => {
         let socket;
@@ -75,13 +165,46 @@ const Orders = () => {
     const handleDeleteOrder = async (orderId) => {
         if (!window.confirm("Are you sure you want to delete this order? This action cannot be undone.")) return;
 
+        // Optimistic Update: Remove from UI immediately
+        const previousOrders = [...orders];
+        setOrders(prev => prev.filter(o => o._id !== orderId));
+
         try {
             const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
             await axios.delete(`${apiUrl}/orders/${orderId}`);
-            setOrders(prev => prev.filter(o => o._id !== orderId));
+            console.log(`Order ${orderId} deleted from Backend successfully`);
         } catch (err) {
-            console.error(err);
-            alert("Failed to delete order. Please try again.");
+            console.error("Delete failed, reverting UI:", err);
+            // Revert UI if backend fails
+            setOrders(previousOrders);
+            alert("Failed to delete order from server. Please check your connection.");
+        }
+    };
+
+    const handleRateSubmit = async (rating, comment) => {
+        try {
+            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+            await axios.post(`${apiUrl}/reviews`, {
+                user: currentUser.uid === ratingOrder.user._id ? ratingOrder.user._id : ratingOrder.user, // Handle populated/unpopulated
+                // Wait, currentUser.uid is firebase ID. The review route expects DB ObjectID for 'user'.
+                // Order object usually has populated user or at least the ID.
+                // The order.user in 'orders' state is populated with {name, email, _id}.
+                // So ratingOrder.user._id is the correct User ObjectId.
+                // UNLESS 'orders' state is fresh from socket update which might return just ID.
+                user: ratingOrder.user._id || ratingOrder.user,
+                restaurant: ratingOrder.restaurant._id || ratingOrder.restaurant,
+                order: ratingOrder._id,
+                rating,
+                comment
+            });
+
+            // Update local state to hide rate button
+            setOrders(prev => prev.map(o => o._id === ratingOrder._id ? { ...o, isRated: true } : o));
+            setRatingOrder(null);
+            alert("Thanks for your feedback!");
+        } catch (err) {
+            console.error("Rating failed:", err);
+            alert("Failed to submit rating");
         }
     };
 
@@ -89,24 +212,23 @@ const Orders = () => {
 
     return (
         <div className="container-fluid" style={{ paddingTop: '2rem', paddingBottom: '4rem', minHeight: '100vh', maxWidth: '1600px', margin: '0 auto' }}>
+            <RateModal
+                isOpen={!!ratingOrder}
+                order={ratingOrder}
+                onClose={() => setRatingOrder(null)}
+                onSubmit={handleRateSubmit}
+            />
             <h1 style={{ marginBottom: '2rem', fontSize: '2.5rem' }}>
                 My Orders <span style={{ fontSize: '1.2rem', color: 'var(--text-light)', fontWeight: '400' }}>({orders.length})</span>
             </h1>
 
             {loading ? (
-                <div style={{ display: 'flex', justifyContent: 'center', padding: '4rem' }}>
-                    <div style={{
-                        width: "40px",
-                        height: "40px",
-                        border: "3px solid rgba(226, 55, 68, 0.3)",
-                        borderRadius: "50%",
-                        borderTopColor: "var(--primary)",
-                        animation: "spin 1s ease-in-out infinite"
-                    }}></div>
-                </div>
+                <LoadingSpinner fullScreen={false} />
             ) : orders.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '4rem 0' }}>
-                    <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>🍽️</div>
+                    <div style={{ fontSize: '4rem', marginBottom: '1rem', color: 'rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'center' }}>
+                        <FiShoppingBag size={80} />
+                    </div>
                     <h2 style={{ marginBottom: '1rem' }}>No orders yet</h2>
                     <p style={{ color: 'var(--text-light)', marginBottom: '2rem' }}>Looks like you haven't indulged in some delicious food yet.</p>
                     <Link to="/" className="btn btn-primary">Start Ordering</Link>
@@ -158,16 +280,61 @@ const Orders = () => {
                                                 padding: '4px 10px',
                                                 borderRadius: '4px',
                                                 background: order.status === 'delivered' ? 'rgba(76, 175, 80, 0.2)' :
-                                                    order.status === 'placed' ? 'rgba(255, 193, 7, 0.2)' : 'rgba(33, 150, 243, 0.2)',
+                                                    order.status === 'ordered' ? 'rgba(33, 150, 243, 0.2)' :
+                                                        order.status === 'placed' ? 'rgba(255, 193, 7, 0.2)' : 'rgba(33, 150, 243, 0.2)',
                                                 color: order.status === 'delivered' ? '#4CAF50' :
-                                                    order.status === 'placed' ? '#FFC107' : '#2196F3'
+                                                    order.status === 'ordered' ? '#2196F3' :
+                                                        order.status === 'placed' ? '#FFC107' : '#2196F3'
                                             }}>
                                                 {order.status === 'placed' ? 'PLACED' :
-                                                    order.status === 'out_for_delivery' ? 'OUT FOR DELIVERY' :
-                                                        order.status.replace('_', ' ').toUpperCase()}
+                                                    order.status === 'ordered' ? 'ORDERED' :
+                                                        order.status === 'out_for_delivery' ? 'OUT FOR DELIVERY' :
+                                                            order.status.replace('_', ' ').toUpperCase()}
                                             </div>
                                         </div>
                                     </div>
+
+                                    {order.deliveryPerson && (
+                                        <div style={{
+                                            marginBottom: '1rem',
+                                            padding: '1rem',
+                                            background: 'rgba(255,255,255,0.05)',
+                                            borderRadius: 'var(--radius-sm)',
+                                            border: '1px solid rgba(255,255,255,0.05)',
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                            flexWrap: 'wrap',
+                                            gap: '1rem'
+                                        }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                                                <div style={{
+                                                    width: '40px', height: '40px', borderRadius: '50%',
+                                                    background: 'rgba(255,255,255,0.1)', display: 'flex',
+                                                    alignItems: 'center', justifyContent: 'center'
+                                                }}>
+                                                    <FiTruck size={20} color="var(--primary)" />
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{order.deliveryPerson.name}</div>
+                                                    <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.6)' }}>
+                                                        {order.deliveryPerson.bikeNumber && <span>{order.deliveryPerson.bikeNumber}</span>}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            {order.deliveryPerson.phoneNumber && (
+                                                <a href={`tel:${order.deliveryPerson.phoneNumber}`} style={{
+                                                    display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                                    padding: '0.5rem 1rem', background: 'var(--primary)',
+                                                    color: 'white', borderRadius: '20px', textDecoration: 'none',
+                                                    fontSize: '0.85rem', fontWeight: 'bold'
+                                                }}>
+                                                    <FiPhone size={14} /> Call Partner
+                                                </a>
+                                            )}
+                                        </div>
+                                    )}
+
                                     <p style={{ color: 'var(--text-light)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
                                         {new Date(order.createdAt).toLocaleDateString()} at {new Date(order.createdAt).toLocaleTimeString()}
                                     </p>
@@ -199,7 +366,19 @@ const Orders = () => {
                                         </div>
                                     ))}
                                 </div>
-                                <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end' }}>
+                                <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
+                                    {order.status === 'delivered' && !order.isRated && (
+                                        <button
+                                            onClick={() => setRatingOrder(order)}
+                                            className="btn"
+                                            style={{
+                                                fontSize: '0.9rem', padding: '0.6rem 1.2rem',
+                                                background: 'rgba(255, 193, 7, 0.1)', color: '#FFC107', border: '1px solid rgba(255, 193, 7, 0.2)'
+                                            }}
+                                        >
+                                            <FiStar style={{ marginRight: '5px' }} /> Rate Food
+                                        </button>
+                                    )}
                                     <button className="btn btn-primary" style={{ fontSize: '0.9rem', padding: '0.6rem 1.2rem' }}>
                                         Reorder
                                     </button>
@@ -212,7 +391,6 @@ const Orders = () => {
                                             background: 'rgba(244, 67, 54, 0.1)',
                                             color: '#F44336',
                                             border: '1px solid rgba(244, 67, 54, 0.2)',
-                                            marginLeft: '1rem',
                                             display: 'flex',
                                             alignItems: 'center',
                                             gap: '0.5rem'
@@ -225,8 +403,9 @@ const Orders = () => {
                         </div>
                     ))}
                 </div>
-            )}
-        </div>
+            )
+            }
+        </div >
     );
 };
 

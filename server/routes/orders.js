@@ -20,7 +20,9 @@ router.get('/admin/all', async (req, res) => {
 });
 
 // Update order status/details (Admin/Vendor)
+// Update order status/details (Admin/Vendor)
 router.put('/:id/status', async (req, res) => {
+    console.log(`PUT /orders/${req.params.id}/status called with body:`, req.body);
     const { status, estimatedDeliveryTime } = req.body;
     const updateFields = {};
     if (status) updateFields.status = status;
@@ -30,27 +32,104 @@ router.put('/:id/status', async (req, res) => {
         const order = await Order.findByIdAndUpdate(
             req.params.id,
             updateFields,
-            { new: true }
-        ).populate('user', 'name email').populate('restaurant', 'name image');
+            { new: true, runValidators: false }
+        ).populate('user', 'name email').populate('restaurant', 'name image').populate('deliveryPerson', 'name phoneNumber bikeNumber');
 
-        if (!order) return res.status(404).json({ msg: 'Order not found' });
+        if (!order) {
+            console.log(`Order ${req.params.id} not found for status update`);
+            return res.status(404).json({ msg: 'Order not found' });
+        }
+
+        console.log(`Order ${req.params.id} updated to status: ${order.status}`);
+
+        // ----------------------------------------------------
+        // AUTO-ASSIGNMENT TRIGGER: When status becomes 'out_for_delivery'
+        // ----------------------------------------------------
+        if (order.status === 'out_for_delivery' && !order.deliveryPerson) {
+            console.log("Status is out_for_delivery, attempting auto-assignment...");
+            try {
+                const deliveryPartners = await User.find({ role: 'delivery' });
+                if (deliveryPartners.length > 0) {
+                    const partnersWithLoad = await Promise.all(deliveryPartners.map(async (partner) => {
+                        const load = await Order.countDocuments({
+                            deliveryPerson: partner._id,
+                            status: { $nin: ['delivered', 'cancelled'] }
+                        });
+                        return { ...partner.toObject(), load };
+                    }));
+                    partnersWithLoad.sort((a, b) => a.load - b.load);
+                    const bestDriver = partnersWithLoad[0];
+
+                    order.deliveryPerson = bestDriver._id;
+                    await order.save();
+
+                    console.log(`Order ${order._id} assigned to ${bestDriver.name} on Out For Delivery`);
+
+                    // Notify Driver
+                    if (req.io) {
+                        req.io.to(bestDriver.firebaseUid).emit('new_delivery_task', order);
+                    }
+
+                    // Populate and re-emit to User so they see the driver details
+                    const populatedOrder = await Order.findById(order._id)
+                        .populate('user', 'name email')
+                        .populate('restaurant', 'name image')
+                        .populate('items.menuItem', 'name price description')
+                        .populate('deliveryPerson', 'name phoneNumber bikeNumber'); // Populated!
+
+                    if (req.io) {
+                        const userId = populatedOrder.user?._id || populatedOrder.user;
+                        if (userId) {
+                            const fullUser = await User.findById(userId);
+                            if (fullUser && fullUser.firebaseUid) {
+                                req.io.to(fullUser.firebaseUid).emit('order_updated', populatedOrder);
+                            }
+                        }
+                    }
+
+                    // Return populated order in response
+                    return res.json(populatedOrder);
+                } else {
+                    console.log("No delivery partners available for assignment.");
+                }
+            } catch (assignErr) {
+                console.error("Error in auto-assignment during status update:", assignErr);
+            }
+        }
+        // ----------------------------------------------------
+
+        // ----------------------------------------------------
 
         // Emit real-time update
         if (req.io) {
-            // We need to find the user's firebaseUid to emit to their room. 
-            // The order.user is populated, so it has ._id, .name, .email. 
-            // We need to fetch the original User doc to get firebaseUid implies explicit search or populate it.
-            // Let's populate 'user' fully to access firebaseUid.
+            try {
+                // Notify Customer
+                const userId = order.user?._id || order.user;
+                if (userId) {
+                    const fullUser = await User.findById(userId);
+                    if (fullUser && fullUser.firebaseUid) {
+                        req.io.to(fullUser.firebaseUid).emit('order_updated', order);
+                    }
+                }
 
-            const fullUser = await User.findById(order.user._id);
-            if (fullUser) {
-                req.io.to(fullUser.firebaseUid).emit('order_updated', order);
+                // Notify Delivery Partner (NEW)
+                if (order.deliveryPerson) {
+                    const driverId = order.deliveryPerson?._id || order.deliveryPerson;
+                    const driver = await User.findById(driverId);
+                    if (driver && driver.firebaseUid) {
+                        console.log(`Emitting delivery_order_updated to driver ${driver.name}`);
+                        req.io.to(driver.firebaseUid).emit('delivery_order_updated', order);
+                    }
+                }
+
+            } catch (e) {
+                console.error("Socket emit error:", e);
             }
         }
 
         res.json(order);
     } catch (err) {
-        console.error(err);
+        console.error("Error in PUT /orders/:id/status:", err);
         res.status(500).send('Server Error');
     }
 });
@@ -85,6 +164,10 @@ router.post('/', async (req, res) => {
 
         const order = await newOrder.save();
 
+        // ----------------------------------------------------
+        // LOGIC: Auto-Assign Removed (Moved to Status Update)
+        // ----------------------------------------------------
+
         // Notify Admins
         if (req.io) {
             req.io.emit('new_order_admin', order);
@@ -94,32 +177,7 @@ router.post('/', async (req, res) => {
 
         res.json(order);
 
-        // Simulation of real-time updates
-        const orderId = order._id;
-        const userUid = user; // firebaseUid passed in body
-
-        const updateStatus = async (status, delay) => {
-            setTimeout(async () => {
-                try {
-                    const updatedOrder = await Order.findByIdAndUpdate(
-                        orderId,
-                        { status },
-                        { new: true }
-                    ).populate('restaurant', 'name image').populate('items.menuItem', 'name price description');
-
-                    if (updatedOrder && req.io) {
-                        req.io.to(userUid).emit('order_updated', updatedOrder);
-                    }
-                } catch (err) {
-                    console.error("Simulation error", err);
-                }
-            }, delay);
-        };
-
-        // Timeline: Preparing (5s), Out (15s), Delivered (30s)
-        updateStatus('preparing', 5000);
-        updateStatus('out_for_delivery', 15000);
-        updateStatus('delivered', 30000);
+        // Automatic simulation removed to allow manual admin control only
 
 
     } catch (err) {
@@ -137,10 +195,32 @@ router.get('/user/:firebaseUid', async (req, res) => {
             return res.json([]);
         }
 
-        const orders = await Order.find({ user: userDoc._id })
+        const orders = await Order.find({
+            user: userDoc._id,
+            isVisibleToUser: { $ne: false } // Include if true or field missing (backwards compatibility)
+        })
             .sort({ createdAt: -1 })
             .populate('restaurant', 'name image')
-            .populate('items.menuItem', 'name price description');
+            .populate('items.menuItem', 'name price description')
+            .populate('deliveryPerson', 'name phoneNumber bikeNumber');
+
+        res.json(orders);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server Error');
+    }
+});
+
+// Get orders assigned to a specific delivery partner
+router.get('/delivery-partner/:firebaseUid', async (req, res) => {
+    try {
+        const userDoc = await User.findOne({ firebaseUid: req.params.firebaseUid });
+        if (!userDoc) return res.status(404).json({ msg: 'User not found' });
+
+        const orders = await Order.find({ deliveryPerson: userDoc._id })
+            .sort({ createdAt: -1 })
+            .populate('restaurant', 'name address')
+            .populate('user', 'name');
 
         res.json(orders);
     } catch (err) {
@@ -200,12 +280,21 @@ router.get('/vendor/:firebaseUid/dashboard', async (req, res) => {
 
 // Delete order
 router.delete('/:id', async (req, res) => {
+    console.log(`DELETE /orders/${req.params.id} called`);
     try {
-        const order = await Order.findByIdAndDelete(req.params.id);
+        // Soft Delete: Hide from user, keep for Admin/Vendor
+        const order = await Order.findByIdAndUpdate(
+            req.params.id,
+            { isVisibleToUser: false },
+            { new: true }
+        );
+
         if (!order) {
+            console.log(`Order ${req.params.id} not found for deletion`);
             return res.status(404).json({ msg: 'Order not found' });
         }
-        res.json({ msg: 'Order removed' });
+        console.log(`Order ${req.params.id} soft-deleted (hidden from user)`);
+        res.json({ msg: 'Order hidden from user dashboard' });
     } catch (err) {
         console.error("Error deleting order:", err);
         res.status(500).send('Server Error');

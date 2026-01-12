@@ -15,15 +15,24 @@ const Login = () => {
     const syncUserWithBackend = async (user, userName) => {
         try {
             const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
-            await axios.post(`${apiUrl}/auth/sync`, {
+            const res = await axios.post(`${apiUrl}/auth/sync`, {
                 firebaseUid: user.uid,
                 email: user.email,
                 name: userName || user.email.split('@')[0]
             });
+            return res.data;
         } catch (err) {
             console.error("Backend sync failed:", err);
             // We ensure login proceeds even if sync fails visually, but ideally this should be handled
+            return null;
         }
+    };
+
+    const handleRedirect = (role) => {
+        if (role === 'admin') navigate('/admin');
+        else if (role === 'restaurant_owner') navigate('/vendor-dashboard');
+        else if (role === 'delivery') navigate('/delivery-dashboard');
+        else navigate('/');
     };
 
     const handleSubmit = async (e) => {
@@ -39,8 +48,12 @@ const Login = () => {
             }
 
             const user = userCredential.user;
-            await syncUserWithBackend(user, name);
-            navigate('/');
+            const dbUser = await syncUserWithBackend(user, name);
+            if (dbUser) {
+                handleRedirect(dbUser.role);
+            } else {
+                navigate('/');
+            }
         } catch (err) {
             console.error(err);
             setError(err.message);
@@ -51,8 +64,12 @@ const Login = () => {
         try {
             const result = await signInWithPopup(auth, googleProvider);
             const user = result.user;
-            await syncUserWithBackend(user, user.displayName);
-            navigate('/');
+            const dbUser = await syncUserWithBackend(user, user.displayName);
+            if (dbUser) {
+                handleRedirect(dbUser.role);
+            } else {
+                navigate('/');
+            }
         } catch (err) {
             console.error(err);
             setError(err.message);

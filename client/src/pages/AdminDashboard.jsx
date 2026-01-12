@@ -3,7 +3,7 @@ import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiHome, FiShoppingBag, FiMenu, FiUsers, FiTrendingUp, FiActivity, FiDollarSign, FiEdit2, FiX, FiRefreshCw } from 'react-icons/fi';
+import { FiHome, FiShoppingBag, FiMenu, FiUsers, FiTrendingUp, FiActivity, FiDollarSign, FiEdit2, FiX, FiRefreshCw, FiTruck } from 'react-icons/fi';
 import { io } from 'socket.io-client';
 
 const AdminDashboard = () => {
@@ -58,6 +58,19 @@ const AdminDashboard = () => {
         isVeg: true
     };
     const [menuItemFormData, setMenuItemFormData] = useState(initialMenuItemState);
+
+    // Delivery Team State
+    const [deliveryUsers, setDeliveryUsers] = useState([]);
+    const [deliveryFormData, setDeliveryFormData] = useState({
+        name: '',
+        email: '',
+        bikeNumber: '',
+        phoneNumber: ''
+    });
+    const [isEditingDriver, setIsEditingDriver] = useState(null);
+    const [isAddingDriver, setIsAddingDriver] = useState(false);
+
+
 
     const showNotification = (type, message) => {
         setNotification({ type, message });
@@ -196,7 +209,8 @@ const AdminDashboard = () => {
             fetchAdminData();
         } catch (err) {
             console.error("Failed to update status", err);
-            alert("Failed to update status");
+            const errMsg = err.response?.data?.msg || err.response?.data?.error || err.message;
+            alert(`Failed to update status: ${errMsg}`);
         }
     };
 
@@ -280,6 +294,59 @@ const AdminDashboard = () => {
             showNotification('error', 'Failed to delete item');
         }
     };
+
+    // Delivery Team Handlers
+    const fetchDeliveryUsers = async () => {
+        try {
+            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+            const res = await axios.get(`${apiUrl}/users/delivery`);
+            setDeliveryUsers(res.data);
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    const handleDeliverySubmit = async (e) => {
+        e.preventDefault();
+        try {
+            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
+            if (isEditingDriver) {
+                await axios.put(`${apiUrl}/users/delivery/${isEditingDriver}`, deliveryFormData);
+                showNotification('success', 'Driver Details Updated');
+            } else {
+                await axios.post(`${apiUrl}/users/delivery`, deliveryFormData);
+                showNotification('success', 'Delivery Person Added');
+            }
+
+            setDeliveryFormData({ name: '', email: '', bikeNumber: '', phoneNumber: '' });
+            setIsAddingDriver(false);
+            setIsEditingDriver(null);
+            await fetchDeliveryUsers();
+        } catch (err) {
+            console.error(err);
+            showNotification('error', 'Failed to save delivery person');
+        }
+    };
+
+    const handleEditDriver = (user) => {
+        setDeliveryFormData({
+            name: user.name,
+            email: user.email,
+            bikeNumber: user.bikeNumber || '',
+            phoneNumber: user.phoneNumber || ''
+        });
+        setIsEditingDriver(user._id);
+        setIsAddingDriver(true);
+    };
+
+    useEffect(() => {
+        if (activeTab === 'delivery') {
+            fetchDeliveryUsers();
+        }
+    }, [activeTab]);
+
+
 
     const startEditMenuItem = (item) => {
         setEditingMenuItem(item);
@@ -404,6 +471,7 @@ const AdminDashboard = () => {
                         <SidebarItem id="orders" icon={<FiShoppingBag size={20} />} label="Live Orders" />
                         <SidebarItem id="menu" icon={<FiMenu size={20} />} label="Menu Manager" />
                         <SidebarItem id="users" icon={<FiUsers size={20} />} label="Users" />
+                        <SidebarItem id="delivery" icon={<FiTruck size={20} />} label="Delivery Team" />
                     </motion.div>
                 )}
             </AnimatePresence>
@@ -594,6 +662,7 @@ const AdminDashboard = () => {
                                                         }}
                                                     >
                                                         <option value="placed">Placed</option>
+                                                        <option value="ordered">Ordered</option>
                                                         <option value="preparing">Preparing</option>
                                                         <option value="out_for_delivery">Out for Delivery</option>
                                                         <option value="delivered">Delivered</option>
@@ -864,9 +933,147 @@ const AdminDashboard = () => {
                             <p>Module under construction...</p>
                         </motion.div>
                     )}
+
+                    {activeTab === 'delivery' && (
+                        <motion.div
+                            key="delivery"
+                            variants={containerVariants}
+                            initial="hidden"
+                            animate="visible"
+                            exit={{ opacity: 0, y: -20 }}
+                        >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+                                <h2 style={{ fontSize: '1.8rem', fontWeight: '300' }}>Delivery Team</h2>
+                                <button
+                                    onClick={() => setIsAddingDriver(!isAddingDriver)}
+                                    style={{
+                                        background: 'var(--primary)',
+                                        color: 'white',
+                                        border: 'none',
+                                        padding: '0.8rem 1.5rem',
+                                        borderRadius: '12px',
+                                        cursor: 'pointer',
+                                        fontWeight: '600'
+                                    }}
+                                >
+                                    {isAddingDriver ? 'Cancel' : 'Add Driver'}
+                                </button>
+                            </div>
+
+                            {isAddingDriver && (
+                                <motion.div
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    exit={{ opacity: 0, height: 0 }}
+                                    className="glass"
+                                    style={{ padding: '2rem', borderRadius: '24px', marginBottom: '2rem', border: '1px solid rgba(255,255,255,0.05)' }}
+                                >
+                                    <form onSubmit={handleDeliverySubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem' }}>
+                                            <div className="input-group">
+                                                <label style={{ display: 'block', marginBottom: '0.5rem', color: 'rgba(255,255,255,0.6)' }}>Full Name</label>
+                                                <input
+                                                    value={deliveryFormData.name}
+                                                    onChange={(e) => setDeliveryFormData({ ...deliveryFormData, name: e.target.value })}
+                                                    required
+                                                    className="input-field"
+                                                    style={{ width: '100%', padding: '0.8rem', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white' }}
+                                                />
+                                            </div>
+                                            <div className="input-group">
+                                                <label style={{ display: 'block', marginBottom: '0.5rem', color: 'rgba(255,255,255,0.6)' }}>Email Address</label>
+                                                <input
+                                                    type="email"
+                                                    value={deliveryFormData.email}
+                                                    onChange={(e) => setDeliveryFormData({ ...deliveryFormData, email: e.target.value })}
+                                                    required
+                                                    className="input-field"
+                                                    style={{ width: '100%', padding: '0.8rem', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white' }}
+                                                />
+                                            </div>
+                                            <div className="input-group">
+                                                <label style={{ display: 'block', marginBottom: '0.5rem', color: 'rgba(255,255,255,0.6)' }}>Phone Number</label>
+                                                <input
+                                                    type="tel"
+                                                    value={deliveryFormData.phoneNumber}
+                                                    onChange={(e) => setDeliveryFormData({ ...deliveryFormData, phoneNumber: e.target.value })}
+                                                    className="input-field"
+                                                    placeholder="e.g. 9876543210"
+                                                    style={{ width: '100%', padding: '0.8rem', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white' }}
+                                                />
+                                            </div>
+                                            <div className="input-group">
+                                                <label style={{ display: 'block', marginBottom: '0.5rem', color: 'rgba(255,255,255,0.6)' }}>Bike Number</label>
+                                                <input
+                                                    value={deliveryFormData.bikeNumber}
+                                                    onChange={(e) => setDeliveryFormData({ ...deliveryFormData, bikeNumber: e.target.value })}
+                                                    required
+                                                    className="input-field"
+                                                    style={{ width: '100%', padding: '0.8rem', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white' }}
+                                                />
+                                            </div>
+                                        </div>
+                                        <button type="submit" style={{ padding: '0.8rem', background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', height: '42px', fontWeight: 'bold', fontSize: '1rem' }}>
+                                            {isEditingDriver ? 'Update Driver' : 'Save Driver'}
+                                        </button>
+                                    </form>
+                                </motion.div>
+                            )}
+
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1.5rem' }}>
+                                {deliveryUsers.map(user => (
+                                    <motion.div
+                                        key={user._id}
+                                        variants={itemVariants}
+                                        className="glass"
+                                        style={{ padding: '1.5rem', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)', position: 'relative' }}
+                                    >
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem' }}>
+                                            <div style={{ width: '50px', height: '50px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', color: 'white', flexShrink: 0 }}>
+                                                <FiTruck size={24} />
+                                            </div>
+                                            <div style={{ flex: 1, minWidth: 0, paddingRight: '0.5rem' }}>
+                                                <div style={{ fontSize: '1.1rem', fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.name}</div>
+                                                <div style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.5)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.email}</div>
+                                                <div style={{ fontSize: '0.85rem', color: 'var(--primary)', marginTop: '4px' }}>
+                                                    {user.phoneNumber}
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={() => handleEditDriver(user)}
+                                                style={{
+                                                    background: 'rgba(255,255,255,0.1)',
+                                                    border: 'none',
+                                                    borderRadius: '50%',
+                                                    width: '35px',
+                                                    height: '35px',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    cursor: 'pointer',
+                                                    color: 'white',
+                                                    flexShrink: 0
+                                                }}
+                                            >
+                                                <FiEdit2 size={16} />
+                                            </button>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                                            <div style={{ fontSize: '0.9rem', color: 'rgba(255,255,255,0.6)' }}>
+                                                Bike: <span style={{ color: 'white' }}>{user.bikeNumber || 'N/A'}</span>
+                                            </div>
+                                            <span style={{ padding: '4px 10px', borderRadius: '12px', background: 'rgba(76, 175, 80, 0.1)', color: '#4CAF50', fontSize: '0.75rem', border: '1px solid rgba(76, 175, 80, 0.2)' }}>
+                                                Active
+                                            </span>
+                                        </div>
+                                    </motion.div>
+                                ))}
+                            </div>
+                        </motion.div>
+                    )}
                 </AnimatePresence>
-            </motion.div>
-        </div>
+            </motion.div >
+        </div >
     );
 };
 

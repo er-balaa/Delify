@@ -9,6 +9,7 @@ import Orders from './pages/Orders';
 import Profile from './pages/Profile';
 import AdminDashboard from './pages/AdminDashboard';
 import VendorDashboard from './pages/VendorDashboard';
+import DeliveryDashboard from './pages/DeliveryDashboard';
 import PrivateRoute from './components/PrivateRoute';
 import { AuthProvider } from './contexts/AuthContext';
 import { CartProvider } from './contexts/CartContext';
@@ -64,6 +65,11 @@ function App() {
                 <Route path="/vendor-dashboard" element={
                   <PrivateRoute>
                     <VendorDashboard />
+                  </PrivateRoute>
+                } />
+                <Route path="/delivery-dashboard" element={
+                  <PrivateRoute>
+                    <DeliveryDashboard />
                   </PrivateRoute>
                 } />
               </Routes>

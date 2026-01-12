@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import RestaurantCard from '../components/RestaurantCard';
-
 import { motion } from 'framer-motion';
+import { io } from 'socket.io-client';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 const RestaurantList = () => {
     const [restaurants, setRestaurants] = useState([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        let socket;
+
         const fetchRestaurants = async () => {
             try {
                 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
@@ -22,9 +25,25 @@ const RestaurantList = () => {
         };
 
         fetchRestaurants();
+
+        // Socket.IO Connection
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+        const socketUrl = apiUrl.replace('/api', '');
+
+        socket = io(socketUrl);
+
+        socket.on('restaurant_added', (newRestaurant) => {
+            setRestaurants(prev => [newRestaurant, ...prev]);
+        });
+
+        socket.on('restaurant_updated', (updatedRestaurant) => {
+            setRestaurants(prev => prev.map(r => r._id === updatedRestaurant._id ? updatedRestaurant : r));
+        });
+
+        return () => {
+            if (socket) socket.disconnect();
+        };
     }, []);
-
-
 
     const containerVariants = {
         hidden: { opacity: 0 },
@@ -60,16 +79,7 @@ const RestaurantList = () => {
             </div>
 
             {loading ? (
-                <div style={{ display: 'flex', justifyContent: 'center', padding: '4rem' }}>
-                    <div style={{
-                        width: "40px",
-                        height: "40px",
-                        border: "3px solid rgba(226, 55, 68, 0.3)",
-                        borderRadius: "50%",
-                        borderTopColor: "var(--primary)",
-                        animation: "spin 1s ease-in-out infinite"
-                    }}></div>
-                </div>
+                <LoadingSpinner fullScreen={false} />
             ) : (
                 <motion.div
                     variants={containerVariants}

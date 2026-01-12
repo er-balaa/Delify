@@ -12,13 +12,23 @@ router.post('/sync', async (req, res) => {
         let user = await User.findOne({ firebaseUid });
 
         if (!user) {
-            user = new User({
-                firebaseUid,
-                email,
-                name,
-                role: email === 'delifyadmin@gmail.com' ? 'admin' : 'customer'
-            });
-            await user.save();
+            // Check if user exists by email (e.g. created by Admin with temp UID)
+            user = await User.findOne({ email });
+
+            if (user) {
+                console.log(`Linking existing user ${email} to Firebase UID: ${firebaseUid}`);
+                user.firebaseUid = firebaseUid;
+                if (!user.name) user.name = name;
+                await user.save();
+            } else {
+                user = new User({
+                    firebaseUid,
+                    email,
+                    name,
+                    role: email === 'delifyadmin@gmail.com' ? 'admin' : 'customer'
+                });
+                await user.save();
+            }
         }
 
         // Auto-promote to restaurant_owner if email matches a restaurant

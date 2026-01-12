@@ -3,7 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
-import { FiEdit2 } from 'react-icons/fi';
+import { FiEdit2, FiStar, FiClock, FiDollarSign, FiPlus, FiCheck } from 'react-icons/fi';
+
+import { io } from 'socket.io-client';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 const RestaurantDetail = () => {
     const { id } = useParams();
@@ -15,6 +18,8 @@ const RestaurantDetail = () => {
     const { addToCart, cart } = useCart();
 
     useEffect(() => {
+        let socket;
+
         const fetchDetails = async () => {
             try {
                 const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
@@ -35,6 +40,36 @@ const RestaurantDetail = () => {
         };
 
         fetchDetails();
+
+        // Socket.IO Connection
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+        const socketUrl = apiUrl.replace('/api', '');
+
+        socket = io(socketUrl);
+
+        // Listen for Restaurant Updates (e.g. rating change)
+        socket.on('restaurant_updated', (updatedRestaurant) => {
+            if (updatedRestaurant._id === id) {
+                setRestaurant(updatedRestaurant);
+            }
+        });
+
+        // Listen for Menu Updates (Add, Update, Delete)
+        socket.on('menu_updated', (data) => {
+            if (data.restaurantId === id) {
+                if (data.action === 'add') {
+                    setMenu(prev => [...prev, data.item]);
+                } else if (data.action === 'update') {
+                    setMenu(prev => prev.map(item => item._id === data.item._id ? data.item : item));
+                } else if (data.action === 'delete') {
+                    setMenu(prev => prev.filter(item => item._id !== data.itemId));
+                }
+            }
+        });
+
+        return () => {
+            if (socket) socket.disconnect();
+        };
     }, [id]);
 
     const handleEditRestaurant = () => {
@@ -42,7 +77,7 @@ const RestaurantDetail = () => {
         navigate('/admin-dashboard');
     };
 
-    if (loading) return <div className="container" style={{ paddingTop: '2rem' }}>Loading...</div>;
+    if (loading) return <LoadingSpinner />;
     if (!restaurant) return <div className="container" style={{ paddingTop: '2rem' }}>Restaurant not found</div>;
 
     const groupedMenu = menu.reduce((acc, item) => {
@@ -103,16 +138,16 @@ const RestaurantDetail = () => {
 
                         <div style={{ display: 'flex', gap: '2rem', marginTop: '1.5rem' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(255,255,255,0.1)', padding: '0.5rem 1rem', borderRadius: 'var(--radius-full)', backdropFilter: 'blur(10px)' }}>
-                                <span style={{ color: '#4CAF50', fontSize: '1.2rem' }}>★</span>
+                                <FiStar size={18} color="#4CAF50" fill="#4CAF50" />
                                 <span style={{ fontWeight: '700', fontSize: '1.1rem' }}>{restaurant.rating}</span>
                                 <span style={{ opacity: 0.7, fontSize: '0.9rem', marginLeft: '0.2rem' }}>Rating</span>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(255,255,255,0.1)', padding: '0.5rem 1rem', borderRadius: 'var(--radius-full)', backdropFilter: 'blur(10px)' }}>
-                                <span>🕒</span>
+                                <FiClock size={18} />
                                 <span style={{ fontWeight: '700', fontSize: '1.1rem' }}>{restaurant.deliveryTime}</span>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(255,255,255,0.1)', padding: '0.5rem 1rem', borderRadius: 'var(--radius-full)', backdropFilter: 'blur(10px)' }}>
-                                <span>💰</span>
+                                <FiDollarSign size={18} />
                                 <span style={{ fontWeight: '700', fontSize: '1.1rem' }}>₹{restaurant.priceForTwo}</span>
                             </div>
                             {currentUser?.role === 'admin' && (
@@ -209,17 +244,29 @@ const RestaurantDetail = () => {
                                                     bottom: '-15px',
                                                     left: '50%',
                                                     transform: 'translateX(-50%)',
-                                                    padding: '0.5rem 2rem',
+                                                    padding: '0.6rem 2rem',
                                                     fontSize: '0.9rem',
                                                     fontWeight: '800',
                                                     boxShadow: 'var(--shadow-md)',
                                                     border: 'none',
                                                     whiteSpace: 'nowrap',
-                                                    minWidth: '100px',
-                                                    cursor: 'pointer'
+                                                    minWidth: '120px',
+                                                    cursor: 'pointer',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    gap: '8px'
                                                 }}
                                             >
-                                                {inCartAmount > 0 ? `ADDED (${inCartAmount})` : 'ADD'}
+                                                {inCartAmount > 0 ? (
+                                                    <>
+                                                        <FiCheck size={18} /> <span>ADDED ({inCartAmount})</span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <FiPlus size={18} /> <span>ADD</span>
+                                                    </>
+                                                )}
                                             </button>
                                         </div>
                                     </div>

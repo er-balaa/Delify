@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCart } from '../contexts/CartContext';
 import { auth } from '../firebase';
-import { FiMenu, FiX } from 'react-icons/fi';
+import { FiMenu, FiX, FiShoppingBag } from 'react-icons/fi';
 
 const Navbar = () => {
     const { currentUser, dbUser } = useAuth();
@@ -119,16 +119,16 @@ const Navbar = () => {
                 {/* Desktop Nav */}
                 <nav className="desktop-nav" style={{ display: 'flex', gap: '2rem', alignItems: 'center', paddingRight: '1rem' }}>
                     <NavItems />
-                    <Link to="/cart" className="btn btn-primary" style={{ padding: '0.7em 1.5em', display: 'flex', gap: '0.6rem' }}>
-                        <span style={{ fontSize: '1.1rem' }}>🛒</span>
+                    <Link to="/cart" className="btn btn-primary" style={{ padding: '0.7em 1.5em', display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+                        <FiShoppingBag size={20} />
                         {cartCount > 0 && <span style={{ background: 'white', color: 'var(--primary)', borderRadius: '20px', padding: '1px 8px', fontSize: '0.85rem', fontWeight: '800' }}>{cartCount}</span>}
                     </Link>
                 </nav>
 
                 {/* Mobile Menu Toggle & Cart Icon */}
                 <div className="mobile-toggle" style={{ display: 'none', paddingRight: '1rem', alignItems: 'center', gap: '1rem' }}>
-                    <Link to="/cart" className="btn btn-primary" style={{ padding: '0.5em 1em', display: 'flex', gap: '0.5rem', fontSize: '0.9rem' }}>
-                        <span style={{ fontSize: '1rem' }}>🛒</span>
+                    <Link to="/cart" className="btn btn-primary" style={{ padding: '0.5em 1em', display: 'flex', gap: '0.5rem', fontSize: '0.9rem', alignItems: 'center' }}>
+                        <FiShoppingBag size={18} />
                         {cartCount > 0 && <span style={{ background: 'white', color: 'var(--primary)', borderRadius: '20px', padding: '0px 6px', fontSize: '0.75rem', fontWeight: '800' }}>{cartCount}</span>}
                     </Link>
                     <button onClick={toggleMenu} style={{ background: 'none', border: 'none', color: 'var(--text-main)', fontSize: '1.5rem', cursor: 'pointer' }}>

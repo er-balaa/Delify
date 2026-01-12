@@ -24,6 +24,8 @@ const authRoutes = require('./routes/auth');
 const restaurantRoutes = require('./routes/restaurants');
 const orderRoutes = require('./routes/orders');
 const cartRoutes = require('./routes/cart');
+const reviewRoutes = require('./routes/reviews');
+const userRoutes = require('./routes/users');
 
 // Middleware
 app.use(cors());
@@ -49,6 +51,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/restaurants', restaurantRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/cart', cartRoutes);
+app.use('/api/reviews', reviewRoutes);
+app.use('/api/users', userRoutes);
 
 const path = require('path');
 

@@ -51,6 +51,12 @@ router.post('/', async (req, res) => {
         });
 
         const restaurant = await newRestaurant.save();
+
+        // Emit Real-time Event
+        if (req.io) {
+            req.io.emit('restaurant_added', restaurant);
+        }
+
         res.json(restaurant);
     } catch (err) {
         console.error("Error adding restaurant:", err);
@@ -98,6 +104,12 @@ router.put('/:id', async (req, res) => {
         }
 
         console.log("Restaurant updated successfully");
+
+        // Emit Real-time Event
+        if (req.io) {
+            req.io.emit('restaurant_updated', updatedRestaurant);
+        }
+
         res.json(updatedRestaurant);
     } catch (err) {
         console.error("Error updating restaurant:", err);
@@ -134,6 +146,16 @@ router.post('/:id/menu', async (req, res) => {
             ...req.body
         });
         const savedItem = await menuItem.save();
+
+        // Emit Real-time Event
+        if (req.io) {
+            req.io.emit('menu_updated', {
+                restaurantId: req.params.id,
+                action: 'add',
+                item: savedItem
+            });
+        }
+
         res.json(savedItem);
     } catch (err) {
         console.error(err);
@@ -149,6 +171,16 @@ router.put('/menu/:itemId', async (req, res) => {
             req.body,
             { new: true }
         );
+
+        // Emit Real-time Event
+        if (req.io) {
+            req.io.emit('menu_updated', {
+                restaurantId: updatedMenuItem.restaurant,
+                action: 'update',
+                item: updatedMenuItem
+            });
+        }
+
         res.json(updatedMenuItem);
     } catch (err) {
         console.error(err);
@@ -159,7 +191,17 @@ router.put('/menu/:itemId', async (req, res) => {
 // Delete menu item
 router.delete('/menu/:itemId', async (req, res) => {
     try {
-        await MenuItem.findByIdAndDelete(req.params.itemId);
+        const item = await MenuItem.findByIdAndDelete(req.params.itemId);
+
+        // Emit Real-time Event
+        if (req.io && item) {
+            req.io.emit('menu_updated', {
+                restaurantId: item.restaurant,
+                action: 'delete',
+                itemId: req.params.itemId
+            });
+        }
+
         res.json({ msg: 'Menu item removed' });
     } catch (err) {
         console.error(err);

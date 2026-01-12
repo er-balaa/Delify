@@ -80,3 +80,9 @@ A full-stack food delivery application built with the MERN stack (MongoDB, Expre
 
 Email: delifyadmin@gmail.com
 Password: admin123delify#
+
+
+kfcowner@gmail.com
+kfcdelify
+
+

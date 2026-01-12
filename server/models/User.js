@@ -17,8 +17,16 @@ const userSchema = new mongoose.Schema({
     },
     role: {
         type: String,
-        enum: ['customer', 'restaurant_owner', 'admin'],
+        enum: ['customer', 'restaurant_owner', 'admin', 'delivery'],
         default: 'customer',
+    },
+    bikeNumber: {
+        type: String,
+        trim: true,
+    },
+    phoneNumber: {
+        type: String,
+        trim: true,
     },
     createdAt: {
         type: Date,
